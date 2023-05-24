@@ -77,11 +77,7 @@
 (require 'seq)
 (require 'subr-x)
 (require 'mind-wave-epc)
-(require 'markdown-mode)
-
-(when (version< emacs-version "28.1")
-  (defun file-name-concat (&rest parts)
-    (cl-reduce (lambda (a b) (expand-file-name b a)) parts)))
+;; (require 'markdown-mode)
 
 (defgroup mind-wave nil
   "Mind-Wave group."
@@ -97,7 +93,7 @@
   :type 'boolean
   :group 'mind-wave)
 
-(defcustom mind-wave-api-key-path (expand-file-name (file-name-concat user-emacs-directory "mind-wave" "chatgpt_api_key.txt"))
+(defcustom mind-wave-api-key-path (expand-file-name (concat user-emacs-directory (file-name-as-directory "mind-wave") "chatgpt_api_key.txt"))
   "The path to store OpenAI API Key."
   :type 'boolean
   :group 'mind-wave)
@@ -350,10 +346,7 @@ Then Mind-Wave will start by gdb, please send new issue with `*mind-wave*' buffe
     map)
   "Mind Wave Chat Keymap")
 
-(define-derived-mode mind-wave-chat-mode gfm-mode "Mind-Wave"
-  (setq-local markdown-hide-markup markdown-hide-markup-in-view-modes)
-  (setq-local markdown-fontify-code-blocks-natively t)
-  (add-to-invisibility-spec 'markdown-markup)
+(define-derived-mode mind-wave-chat-mode fundamental-mode "Mind-Wave"
   (when mind-wave-auto-update-old-chats
     (mind-wave--update-chat-buffer-to-new-version)))
 
@@ -382,7 +375,7 @@ Then Mind-Wave will start by gdb, please send new issue with `*mind-wave*' buffe
   (let ((prompt (read-string "Ask ChatGPT: ")))
     (if (string-empty-p (string-trim prompt))
         (message "Please don't send empty question.")
-      (mind-wave-chat-ask-with-message prompt)
+      (mind-wave-chat-ask-with-message (concat prompt ""))
       )))
 
 (defun mind-wave-chat-ask-insert-line-with-role (role)
@@ -696,7 +689,7 @@ Then Mind-Wave will start by gdb, please send new issue with `*mind-wave*' buffe
   (message "Explaining...")
   (mind-wave-call-async "action_code"
                         (buffer-name)
-                        (format "%s" major-mode)
+                        "fundamental-mode"
                         (mind-wave--encode-string (nth 2 (mind-wave-get-region-or-function)))
                         mind-wave-code-role
                         (format "Please explain in detail the meaning of the following code, in %s, leave a blank line between each sentence." (mind-wave-output-lang))
