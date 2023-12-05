@@ -124,6 +124,31 @@ class MindWave:
         return (result, response)
 
     @catch_exception
+    def send_stream_request_by_select_model(self, model, messages, callback):
+        response = openai.ChatCompletion.create(
+            model=model,
+            messages=messages,
+            temperature=0,
+            stream=True)
+
+        for chunk in response:
+            (result_type, result_content) = self.get_chunk_result(chunk)
+            callback(result_type, result_content)
+
+    @threaded
+    def chat_ask_with_model(self, buffer_file_name, buffer_content, prompt, model):
+        content = self.chat_parse_content(buffer_content)
+
+        messages = content
+        if prompt:
+            messages = content + [{"role": "user", "content": prompt}]
+
+        def callback(result_type, result_content):
+            eval_in_emacs("mind-wave-chat-ask-with-model-response", buffer_file_name, result_type, result_content)
+
+        self.send_stream_request_by_select_model(model,messages, callback)
+
+    @catch_exception
     def send_stream_request(self, messages, callback):
         response = openai.ChatCompletion.create(
             model = "gpt-3.5-turbo",

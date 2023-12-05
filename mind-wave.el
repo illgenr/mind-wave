@@ -800,6 +800,41 @@ Your task is to summarize the text I give you in up to seven concise  bulletpoin
 (defvar-local mind-wave-accumulated-content ""
   "Variable to accumulate content strings for the mind-wave-reponse-end-hook.")
 
+(defun mind-wave-chat-ask-with-model-response (filename type answer)
+  (mind-wave--with-file-buffer filename
+    (pcase type
+      ("start"
+       (setq-local mind-wave-is-response-p t)
+       ;; Initialize the accumulated content to an empty string at the start
+       (setq-local mind-wave-accumulated-content "")
+
+       (goto-char (point-max))
+       (insert "## > Assistant: ")
+       (message "ChatGPT speaking..."))
+      ("content"
+       ;; Append the decoded answer to the accumulated content
+       (let ((decoded-answer (mind-wave-decode-base64 answer)))
+         (save-excursion
+           (goto-char (point-max))
+           (insert decoded-answer))
+         ;; Update the accumulated content
+         (setq mind-wave-accumulated-content
+               (concat mind-wave-accumulated-content decoded-answer)))
+       (end-of-buffer))
+      ("end"
+       (save-excursion
+         (goto-char (point-max))
+         (insert "\n;)\n")
+         ;; Pass the accumulated content to the hook and reset the variable
+         (run-hook-with-args 'mind-wave-reponse-end-hook mind-wave-accumulated-content)
+         (setq-local mind-wave-accumulated-content "")) ;; Reset to empty string
+       (when mind-wave-auto-change-title
+         (mind-wave-chat-parse-title nil))
+
+       (run-with-timer 1 nil (lambda() (setq-local mind-wave-is-response-p nil)))
+       (message "ChatGPT response finish.")
+       ))))
+
 (defun mind-wave-chat-ask--response (filename type answer)
   (mind-wave--with-file-buffer filename
     (pcase type
