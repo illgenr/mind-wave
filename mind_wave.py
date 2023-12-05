@@ -114,7 +114,7 @@ class MindWave:
     @catch_exception
     def send_completion_request(self, messages):
         response = openai.ChatCompletion.create(
-            model = "gpt-3.5-turbo",
+            model = "gpt-4-1106-preview",
             messages = messages)
 
         result = ''
@@ -151,7 +151,7 @@ class MindWave:
     @catch_exception
     def send_stream_request(self, messages, callback):
         response = openai.ChatCompletion.create(
-            model = "gpt-3.5-turbo",
+            model = "gpt-4-1106-preview",
             messages = messages,
             temperature=0,
             stream=True)
@@ -352,7 +352,7 @@ class MindWave:
 
         try:
             response = openai.ChatCompletion.create(
-                model = "gpt-3.5-turbo",
+                model = "gpt-4-1106-preview",
                 messages = messages,
                 temperature=0,
                 stream=True)

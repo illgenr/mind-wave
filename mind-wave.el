@@ -357,6 +357,22 @@ Then Mind-Wave will start by gdb, please send new issue with `*mind-wave*' buffe
 (defun mind-wave-get-buffer-string ()
   (buffer-substring-no-properties (max (point-min) (- (point-max) mind-wave-max-context-on-chat))  (point-max)))
 
+(defun mind-wave-chat-ask-with-message-and-mode (prompt model)
+  (save-excursion
+    (goto-char (point-max))
+    (unless (equal (point) (point-min))
+      (insert "\n"))
+    (insert "# > User: ")
+    (insert (format "%s\n\n" prompt)))
+
+  (message "Wait ChatGPT...")
+  (mind-wave-call-async "chat_ask_with_model"
+                        (buffer-file-name)
+                        (mind-wave--encode-string (mind-wave-get-buffer-string))
+                        prompt
+                        model
+                        ))
+
 (defun mind-wave-chat-ask-with-message (prompt)
   (save-excursion
     (goto-char (point-max))
