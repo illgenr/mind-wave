@@ -368,7 +368,7 @@ Then Mind-Wave will start by gdb, please send new issue with `*mind-wave*' buffe
   (message "Wait ChatGPT...")
   (mind-wave-call-async "chat_ask_with_model"
                         (buffer-file-name)
-                        (mind-wave--encode-string (mind-wave-get-buffer-string))
+                        ""
                         prompt
                         model
                         ))
