@@ -1,3 +1,4 @@
+
 ;;; mind-wave.el --- Mind Wave  -*- lexical-binding: t -*-
 
 ;; Filename: mind-wave.el
@@ -6,9 +7,9 @@
 ;; Maintainer: Andy Stewart <lazycat.manatee@gmail.com>
 ;; Copyright (C) 2023, Andy Stewart, all rights reserved.
 ;; Created: 2023-03-09 14:10:12
-;; Version: 0.2
-;; Last-Updated: 2023-03-20 15:23:53 +0800
-;;           By: Andy Stewart
+;; Version: 0.3
+;; Last-Updated: 2023-12-15T19:12:32
+;;           By: Raleigh Illgen
 ;; URL: https://github.com/manateelazycat/mind-wave
 ;; Keywords:
 ;; Compatibility: emacs-version >= 28
@@ -159,8 +160,9 @@
      (when-let* ((file-name (buffer-file-name buffer))
                  (match-buffer (or (string-equal file-name ,filename)
                                    (string-equal (file-truename file-name) ,filename))))
-       (with-current-buffer buffer
+	   (with-current-buffer buffer
          ,@body)
+	   (message "In buffer: %s" (buffer-name))
        (cl-return))))
 
 (defun mind-wave-output-lang ()
@@ -852,39 +854,36 @@ Your task is to summarize the text I give you in up to seven concise  bulletpoin
        ))))
 
 (defun mind-wave-chat-ask--response (filename type answer)
-  (mind-wave--with-file-buffer filename
-    (pcase type
-      ("start"
-       (setq-local mind-wave-is-response-p t)
-       ;; Initialize the accumulated content to an empty string at the start
-       (setq-local mind-wave-accumulated-content "")
+  "Responds to different types of messages by writing to the buffer associated with FILENAME."
+  ;; First, find and switch to the buffer with the given filename.
+  (let ((buffer (find-file-noselect filename)))
+    (when buffer
+      (with-current-buffer buffer
+        ;; Perform different actions based on the TYPE of the message.
+        (cond
+         ((string-equal type "start")
+          (setq-local mind-wave-is-response-p t)
+          (setq-local mind-wave-accumulated-content "")
+          (goto-char (point-max))
+          (insert "## > Assistant: ")
+          (message "ChatGPT speaking..."))
 
-       (goto-char (point-max))
-       (insert "## > Assistant: ")
-       (message "ChatGPT speaking..."))
-      ("content"
-       ;; Append the decoded answer to the accumulated content
-       (let ((decoded-answer (mind-wave-decode-base64 answer)))
-         (save-excursion
-           (goto-char (point-max))
-           (insert decoded-answer))
-         ;; Update the accumulated content
-         (setq mind-wave-accumulated-content
-               (concat mind-wave-accumulated-content decoded-answer)))
-       (end-of-buffer))
-      ("end"
-       (save-excursion
-         (goto-char (point-max))
-         (insert "\n;)\n")
-         ;; Pass the accumulated content to the hook and reset the variable
-         (run-hook-with-args 'mind-wave-reponse-end-hook mind-wave-accumulated-content)
-         (setq-local mind-wave-accumulated-content "")) ;; Reset to empty string
-       (when mind-wave-auto-change-title
-         (mind-wave-chat-parse-title nil))
+         ((string-equal type "content")
+          (let ((decoded-answer (mind-wave-decode-base64 answer)))
+            (goto-char (point-max))
+            (insert decoded-answer)
+            (setq mind-wave-accumulated-content
+                  (concat mind-wave-accumulated-content decoded-answer))))
 
-       (run-with-timer 1 nil (lambda() (setq-local mind-wave-is-response-p nil)))
-       (message "ChatGPT response finish.")
-       ))))
+         ((string-equal type "end")
+          (goto-char (point-max))
+          (insert "\n;)\n")
+          (run-hook-with-args 'mind-wave-reponse-end-hook mind-wave-accumulated-content)
+          (setq-local mind-wave-accumulated-content "")
+          (when mind-wave-auto-change-title
+            (mind-wave-chat-parse-title nil))
+          (run-with-timer 1 nil (lambda() (setq-local mind-wave-is-response-p nil)))
+          (message "ChatGPT response finish.")))))))
 
 (defun mind-wave-async-text--response (filename
                                        type
