@@ -19,18 +19,26 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 from openai import OpenAI
+import together
 import queue
 import threading
 import traceback
 import os
 import sys
+import time
 import base64
 import logging
 from epc.server import ThreadingEPCServer
 from functools import wraps
 from utils import (get_command_result, get_emacs_var, get_emacs_vars, init_epc_client, eval_in_emacs, logger, close_epc_client, message_emacs, string_to_base64)
 
-client = OpenAI()
+
+# Global variable to store the selected LLM
+# Options: OpenAI, TogetherAI
+selected_llm = 'OpenAI'  # Default LLM
+
+client_openai = OpenAI()
+
 
 def catch_exception(func):
     @wraps(func)
@@ -50,6 +58,11 @@ def threaded(func):
             args[0].thread_queue.append(thread)
     return wrapper
 
+# Function to switch LLMs
+def switch_llm(llm_name):
+    global selected_llm
+    selected_llm = llm_name    
+    
 class MindWave:
     def __init__(self, args):
         # Init EPC client port.
@@ -60,10 +73,12 @@ class MindWave:
         # self.server.logger.setLevel(logging.DEBUG)
         self.server.allow_reuse_address = True
 
-        # Get API key.
-        api_key = self.chat_get_api_key()
-        if api_key is not None:
-            OpenAI.api_key = api_key
+        # Get API keys.
+        openai_api_key = self.openai_get_api_key()
+        if openai_api_key is not None:
+            OpenAI.api_key = openai_api_key
+
+        together.api_key =  self.togetherai_get_api_key()
 
         OpenAI.api_base, OpenAI.api_type, OpenAI.api_version = get_emacs_vars(["mind-wave-api-base", "mind-wave-api-type", "mind-wave-api-version"])
 
@@ -98,7 +113,7 @@ class MindWave:
         except:
             logger.error(traceback.format_exc())
 
-    def chat_get_api_key(self):
+    def openai_get_api_key(self):
         mind_wave_chat_api_key_file_path = os.path.expanduser(get_emacs_var("mind-wave-api-key-path"))
         key = None
         if os.path.exists(mind_wave_chat_api_key_file_path):
@@ -114,9 +129,31 @@ class MindWave:
 
         return key
 
+    def togetherai_get_api_key(self):
+        mind_wave_chat_api_key_file_path = os.path.expanduser(get_emacs_var("mind-wave-api-key-path"))
+        key = None
+        if os.path.exists(mind_wave_chat_api_key_file_path):
+            with open(mind_wave_chat_api_key_file_path, "r") as f:
+                api_key = f.read().strip()
+                if api_key != "":
+                    key = api_key
+        else:
+            key = os.environ.get("TOGETHERAI_API_KEY")
+
+        if key is None:
+            message_emacs(f"TogetherAI API key not found, please copy it from https://platform.openai.com/account/api-keys, and fill API key in file: {mind_wave_chat_api_key_file_path}. Or set the enviroment OPENAI_API_KEY")
+
+        return key
+
+    # Function to handle 'select-llm' command from Emacs
+    @threaded
+    def handle_select_llm_command(self, llm_name):
+        switch_llm(llm_name)
+    
+    
     @catch_exception
     def send_completion_request(self, messages):
-        response = client.chat.completions.create(
+        response = client_openai.chat.completions.create(
             # model = "gpt-4-1106-preview",
             model = "gpt-3.5-turbo",
             messages = messages)
@@ -129,7 +166,7 @@ class MindWave:
 
     @catch_exception
     def send_stream_request_by_select_model(self, model, messages, callback):
-        response = client.chat.completions.create(
+        response = client_openai.chat.completions.create(
             model=model,
             messages=messages,
             temperature=0,
@@ -154,25 +191,63 @@ class MindWave:
         self.send_stream_request_by_select_model(model,messages, callback)
 
     @catch_exception
-    def send_stream_request(self, messages, callback):
-        response = client.chat.completions.create(
-            # model = "gpt-4-1106-preview",
-            model = "gpt-3.5-turbo",
-            messages = messages,
-            #temperature=0,
-            stream=True)
+    def send_stream_request(self, messages, callback):                    
+        response = self.get_completion(messages)        
 
-        print(response)
+        if(selected_llm == 'TogetherAI'):
+            callback("start", "")
+           
+        for chunk in response:            
 
-        for chunk in response:
-            print(chunk.choices[0].delta.content, end="")
-            chunk_result = self.get_chunk_result(chunk)
-            if chunk_result is None:
-                print("result is none\n")
-                continue
-            else:                
-                result_type, result_content = chunk_result
-                callback(result_type, result_content)
+            if(selected_llm == 'OpenAI'):
+                chunk_result = self.get_chunk_result(chunk)                
+            
+                if chunk_result is None:
+                    continue
+                else:                
+                    result_type, result_content = chunk_result
+                    callback(result_type, result_content)
+            else:
+                callback("content", string_to_base64(chunk))
+
+        if(selected_llm == 'TogetherAI'):
+            callback("end", "")
+
+    @catch_exception
+    # Function to get completions from the selected LLM
+    def get_completion(self, messages):
+        if selected_llm == 'OpenAI':
+            # Use OpenAI for completion
+            response = client_openai.chat.completions.create(
+                # model = "gpt-4-1106-preview",
+                model = "gpt-3.5-turbo",
+                messages = messages,
+                # temperature=0,
+                # max_tokens=150,
+                stream=True)
+            return response
+        
+        elif selected_llm == 'TogetherAI':
+
+            # join messages to string
+            converted_list = map(str, messages)
+            message_string = ''.join(converted_list)            
+
+            # Use together.ai for completion (streaming style)
+            response = together.Complete.create_streaming(
+                prompt=message_string,
+                model = "togethercomputer/CodeLlama-34b",
+                max_tokens = 256,
+                temperature = 0.8,
+                top_k = 60,
+                top_p = 0.6,
+                repetition_penalty = 1.1
+                #stop = ['<human>', '\n\n']
+                )
+
+            return response
+        else:
+            raise ValueError("Unknown LLM selected")    
 
     @threaded
     def chat_ask(self, buffer_file_name, buffer_content, prompt):
@@ -180,10 +255,7 @@ class MindWave:
 
         messages = content
 
-        print("chat_ask call")
         if prompt:
-            print("chat_ask prompt")
-            print(buffer_file_name)
             messages = content + [{"role": "user", "content": prompt}]
 
         def callback(result_type, result_content):
@@ -371,7 +443,8 @@ class MindWave:
 
         try:
             response = openai.ChatCompletion.create(
-                model = "gpt-4-1106-preview",
+                # model = "gpt-4-1106-preview",
+                model = "gpt-3.5-turbo",
                 messages = messages,
                 temperature=0,
                 stream=True)
@@ -400,6 +473,7 @@ class MindWave:
 
         # Handle any other case not covered above
         return ("unknown", "")
+
 
     def cleanup(self):
         """Do some cleanup before exit python process."""

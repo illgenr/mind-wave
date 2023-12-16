@@ -142,7 +142,7 @@
 (defvar mind-wave-lang (or (ignore-errors (car (split-string (getenv "LANG") "\\.")))
                            (car (split-string current-language-environment "-"))))
 
-(defvar mind-wave-max-context-on-chat 2048)
+(defvar mind-wave-max-context-on-chat 4096)
 
 (defvar mind-wave-server nil
   "The Mind-Wave Server.")
@@ -152,6 +152,25 @@
                                                                  default-directory)))
 
 (defvar mind-wave-server-port nil)
+
+(defun mind-wave-select-llm (llm)
+  "Select an LLM for Mind Wave."
+  (interactive
+   (list (completing-read "Select LLM: " '("OpenAI" "TogetherAI")))) ;; Add more LLMs as needed
+  (mind-wave-send-command "select-llm" llm))
+
+(defun mind-wave-send-command (command &rest args)
+  "Send a command with ARGS to the Mind Wave Python backend."
+  ;; Existing implementation
+  ;; ...
+  ;; Add handling for the 'select-llm' command
+  (when (string-equal command "select-llm")
+    (let ((llm (car args)))
+      ;; Send the LLM selection to the Python script
+      ;; This depends on how you're currently communicating with the Python script
+      ;; Example: (mind-wave-send-to-python llm)
+	  (mind-wave-call-async "handle_select_llm_command" llm)
+      )))
 
 (cl-defmacro mind-wave--with-file-buffer (filename &rest body)
   "Evaluate BODY in buffer with FILEPATH."
@@ -367,7 +386,7 @@ Then Mind-Wave will start by gdb, please send new issue with `*mind-wave*' buffe
     (insert "# > User: ")
     (insert (format "%s\n\n" prompt)))
 
-  (message "Wait ChatGPT...")
+  (message "LLM responding...")
   (mind-wave-call-async "chat_ask_with_model"
                         (buffer-file-name)
                         ""
@@ -383,7 +402,7 @@ Then Mind-Wave will start by gdb, please send new issue with `*mind-wave*' buffe
     (insert "# > User: ")
     (insert (format "%s\n\n" prompt)))
 
-  (message "Wait ChatGPT...")
+  (message "LLM responding...")
   (mind-wave-call-async "chat_ask"
                         (buffer-file-name)
                         (mind-wave--encode-string (mind-wave-get-buffer-string))
@@ -392,7 +411,7 @@ Then Mind-Wave will start by gdb, please send new issue with `*mind-wave*' buffe
 
 (defun mind-wave-chat-ask ()
   (interactive)
-  (let ((prompt (read-string "Ask ChatGPT: ")))
+  (let ((prompt (read-string "Ask LLM: ")))
     (if (string-empty-p (string-trim prompt))
         (message "Please don't send empty question.")
       (mind-wave-chat-ask-with-message (concat prompt ""))
@@ -424,7 +443,7 @@ Then Mind-Wave will start by gdb, please send new issue with `*mind-wave*' buffe
   (interactive)
   (goto-char (line-end-position))
   (insert "\n")
-  (message "Wait ChatGPT...")
+  (message "LLM responding...")
   (when mind-wave-auto-update-old-chats
     (mind-wave--update-chat-buffer-to-new-version))
   (mind-wave-call-async "chat_ask"
@@ -586,8 +605,8 @@ Then Mind-Wave will start by gdb, please send new issue with `*mind-wave*' buffe
                           (mind-wave--encode-string (nth 2 (mind-wave-get-region-or-sentence)))
                           word
                           "Explain word"
-                          "ChatGPT explaining..."
-                          "ChatGPT explain finish.")))
+                          "LLM explaining..."
+                          "LLM explain finish.")))
 
 (defun mind-wave-current-parse-state ()
   "Return parse state of point from beginning of defun."
@@ -696,8 +715,8 @@ Then Mind-Wave will start by gdb, please send new issue with `*mind-wave*' buffe
                              "Please help me refactor the following code. Please reply with the refactoring explanation in %s, refactored code, and diff between two versions. Please ignore the comments and strings in the code during the refactoring. If the code remains unchanged after refactoring, please say 'No need to refactor'."
                              (mind-wave-output-lang)))
                         "refactory"
-                        "ChatGPT refactoring..."
-                        "ChatGPT refactory finish."))
+                        "LLM refactoring..."
+                        "LLM refactory finish."))
 
 (defun mind-wave-refactory-code-with-input ()
   (interactive)
@@ -713,8 +732,8 @@ Then Mind-Wave will start by gdb, please send new issue with `*mind-wave*' buffe
                         mind-wave-code-role
                         "Please add code comments to the following code, with the comments written in English within the code, and output the code including the comments."
                         "comment"
-                        "ChatGPT commenting..."
-                        "ChatGPT comment finish."))
+                        "LLM commenting..."
+                        "LLM comment finish."))
 
 (defun mind-wave-explain-code ()
   (interactive)
@@ -726,8 +745,8 @@ Then Mind-Wave will start by gdb, please send new issue with `*mind-wave*' buffe
                         mind-wave-code-role
                         (format "Please explain in detail the meaning of the following code, in %s, leave a blank line between each sentence." (mind-wave-output-lang))
                         "explain"
-                        "ChatGPT explaining..."
-                        "ChatGPT explain finish."))
+                        "LLM explaining..."
+                        "LLM explain finish."))
 
 (defun mind-wave-explain-point ()
   (interactive)
@@ -741,8 +760,8 @@ Then Mind-Wave will start by gdb, please send new issue with `*mind-wave*' buffe
                           (format "Please briefly summarize the meaning of the following code snippet in %s within 200 words. Then, start a new paragraph to explain '%s' API in following code, with the names, types, and functions of each parameter. Finally, provide some example code using the '%s' API, presented in Markdown format."
                                   (mind-wave-output-lang) api api)
                           "explain"
-                          "ChatGPT explaining..."
-                          "ChatGPT explain finish.")))
+                          "LLM explaining..."
+                          "LLM explain finish.")))
 
 (defun mind-wave-check-typos ()
   (interactive)
@@ -754,8 +773,8 @@ Then Mind-Wave will start by gdb, please send new issue with `*mind-wave*' buffe
                         mind-wave-summary-role
                         "请检查下面内容的中文错别字。 回答请用 ```'索引': '错别字' - '修改建议'``` 的格式来回答， 其中 '索引' 是指错别字相对于下面内容的行偏移。 如果没有错别字请忽略。 请用中文回答。 "
                         "typos"
-                        "ChatGPT checking..."
-                        "ChatGPT check finish."))
+                        "LLM checking..."
+                        "LLM check finish."))
 
 (defun mind-wave-generate-commit-name ()
   (interactive)
@@ -792,8 +811,8 @@ Your task is to summarize the text I give you in up to seven concise  bulletpoin
                           video-id
                           mind-wave-summary-role
                           mind-wave-summary-template
-                          "ChatGPT summary video..."
-                          "ChatGPT summary video finish.")))
+                          "LLM summary video..."
+                          "LLM summary video finish.")))
 
 (defun mind-wave-summary-web ()
   (interactive)
@@ -807,8 +826,8 @@ Your task is to summarize the text I give you in up to seven concise  bulletpoin
                           url
                           mind-wave-summary-role
                           mind-wave-summary-template
-                          "ChatGPT summary web..."
-                          "ChatGPT summary web finish.")))
+                          "LLM summary web..."
+                          "LLM summary web finish.")))
 
 (defvar-local mind-wave-is-response-p nil)
 
@@ -828,7 +847,7 @@ Your task is to summarize the text I give you in up to seven concise  bulletpoin
 
        (goto-char (point-max))
        (insert "## > Assistant: ")
-       (message "ChatGPT speaking..."))
+       (message "LLM speaking..."))
       ("content"
        ;; Append the decoded answer to the accumulated content
        (let ((decoded-answer (mind-wave-decode-base64 answer)))
@@ -850,7 +869,7 @@ Your task is to summarize the text I give you in up to seven concise  bulletpoin
          (mind-wave-chat-parse-title nil))
 
        (run-with-timer 1 nil (lambda() (setq-local mind-wave-is-response-p nil)))
-       (message "ChatGPT response finish.")
+       (message "LLM response finish.")
        ))))
 
 (defun mind-wave-chat-ask--response (filename type answer)
@@ -866,7 +885,7 @@ Your task is to summarize the text I give you in up to seven concise  bulletpoin
           (setq-local mind-wave-accumulated-content "")
           (goto-char (point-max))
           (insert "## > Assistant: ")
-          (message "ChatGPT speaking..."))
+          (message "LLM speaking..."))
 
          ((string-equal type "content")
           (let ((decoded-answer (mind-wave-decode-base64 answer)))
@@ -883,7 +902,7 @@ Your task is to summarize the text I give you in up to seven concise  bulletpoin
           (when mind-wave-auto-change-title
             (mind-wave-chat-parse-title nil))
           (run-with-timer 1 nil (lambda() (setq-local mind-wave-is-response-p nil)))
-          (message "ChatGPT response finish.")))))))
+          (message "LLM response finish.")))))))
 
 (defun mind-wave-async-text--response (filename
                                        type
